@@ -1,6 +1,6 @@
 # typeinfo.c
 
-[![Build](https://github.com/bamless/typeinfo/actions/workflows/build.yml/badge.svg)](https://github.com/bamless/typeinfo/actions/workflows/build.yml)
+[![Build](https://github.com/bamless/typeinfo.c/actions/workflows/build.yml/badge.svg)](https://github.com/bamless/typeinfo.c/actions/workflows/build.yml)
 
 Compile-time type reflection for C. A metaprogram parses your C headers using
 libclang, then generates static type information tables that you can query at
