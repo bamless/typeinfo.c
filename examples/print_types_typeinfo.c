@@ -19,7 +19,7 @@ Type_Info_Float typeinfo_double = {{ TYPE_TAG_FLOAT, sizeof(double), TYPEINFO_AL
 Type_Info_Float typeinfo_long_double = {{ TYPE_TAG_FLOAT, sizeof(long double), TYPEINFO_ALIGNOF(long double) }};
 
 // struct Foo
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:24:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:24:9
 static Type_Info_Member members_Foo[] = {
   { (char*[]){ "CStr", NULL }, "name", 0, (Type_Info*)&(Type_Info_Array){{TYPE_TAG_ARRAY, 256, 1}, 256, (Type_Info*)&typeinfo_char }, TYPE_INFO_QUALIFIER_NONE },
   { (char*[]){ NULL }, "test", 256, (Type_Info*)&typeinfo_int, TYPE_INFO_QUALIFIER_NONE },
@@ -34,7 +34,7 @@ Type_Info_Struct typeinfo_Foo = {
 };
 
 // enum Color
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:30:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:30:9
 static Type_Info_Enum_Value values_Color[] = {
   { (char*[]){ "Primary", "Secondary", NULL }, "COLOR_RED", 0 },
   { (char*[]){ "Primary", NULL }, "COLOR_GREEN", 1 },
@@ -52,7 +52,7 @@ Type_Info_Enum typeinfo_Color = {
 };
 
 // union TestUnion
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:39:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:39:9
 static Type_Info_Member members_TestUnion[] = {
   { (char*[]){ NULL }, "i", 0, (Type_Info*)&typeinfo_int, TYPE_INFO_QUALIFIER_NONE },
   { (char*[]){ NULL }, "f", 0, (Type_Info*)&typeinfo_float, TYPE_INFO_QUALIFIER_NONE },
@@ -71,7 +71,7 @@ Type_Info_Union typeinfo_TestUnion = {
 };
 
 // struct TestAnonymousEnum
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:49:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:49:9
 static Type_Info_Member members_TestAnonymousEnum[] = {
   { (char*[]){ NULL }, "anon_enum_field", 0, (Type_Info*)&(Type_Info_Enum){{TYPE_TAG_ENUM, 4, 4}, (char*[]){ NULL }, "", (Type_Info_Enum_Value[]){
     { (char*[]){ NULL }, "ANON_A", 0 },
@@ -89,7 +89,7 @@ Type_Info_Struct typeinfo_TestAnonymousEnum = {
 };
 
 // struct TestUnnamedAnonymous
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:54:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:54:9
 static Type_Info_Member members_TestUnnamedAnonymous[] = {
   { (char*[]){ NULL }, "before", 0, (Type_Info*)&typeinfo_int, TYPE_INFO_QUALIFIER_NONE },
   { (char*[]){ NULL }, "", 4, (Type_Info*)&(Type_Info_Struct){{TYPE_TAG_STRUCT, 4, 4}, (char*[]){ NULL }, "", (Type_Info_Member[]){
@@ -109,7 +109,7 @@ Type_Info_Struct typeinfo_TestUnnamedAnonymous = {
 };
 
 // struct TestQualifiers
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:65:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:65:9
 static Type_Info_Member members_TestQualifiers[] = {
   { (char*[]){ NULL }, "ci", 0, (Type_Info*)&typeinfo_int, TYPE_INFO_QUALIFIER_CONST },
   { (char*[]){ NULL }, "vi", 4, (Type_Info*)&typeinfo_int, TYPE_INFO_QUALIFIER_VOLATILE },
@@ -126,7 +126,7 @@ Type_Info_Struct typeinfo_TestQualifiers = {
 };
 
 // struct Bar
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:13:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:13:9
 static Type_Info_Member members_Bar[] = {
   { (char*[]){ NULL }, "x", 0, (Type_Info*)&typeinfo_unsigned_long, TYPE_INFO_QUALIFIER_NONE },
   { (char*[]){ NULL }, "y", 8, (Type_Info*)&typeinfo_unsigned_long, TYPE_INFO_QUALIFIER_NONE },
@@ -146,7 +146,7 @@ Type_Info_Struct typeinfo_Bar = {
 };
 
 // struct Baz
-// /home/fabrizio/Workspace/c/probe/typeinfo/examples/print_types.h:8:9
+// /home/fabrizio/Workspace/c/typeinfo.c/examples/print_types.h:8:9
 static Type_Info_Member members_Baz[] = {
   { (char*[]){ NULL }, "iptr", 0, (Type_Info*)&typeinfo_long, TYPE_INFO_QUALIFIER_NONE },
   { (char*[]){ NULL }, "ptr", 8, (Type_Info*)&(Type_Info_Pointer){{TYPE_TAG_POINTER, sizeof(void*), 8}, (Type_Info*)&typeinfo_void, TYPE_INFO_QUALIFIER_NONE }, TYPE_INFO_QUALIFIER_NONE },
