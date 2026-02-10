@@ -15,6 +15,8 @@ jobs:
           - os: ubuntu-latest
           - os: macos-latest
           - os: windows-latest
+          - os: windows-latest
+            cc: clang
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -39,20 +41,41 @@ jobs:
         choco install llvm -y
         echo "CMAKE_PREFIX_PATH=C:\Program Files\LLVM" >> $env:GITHUB_ENV
 
+    - name: Setup MSVC dev environment (Windows Clang)
+      if: matrix.cc == 'clang'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Ninja (Windows Clang)
+      if: matrix.cc == 'clang'
+      run: choco install ninja -y
+
     - name: Configure
+      if: matrix.cc != 'clang'
       run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DTYPEINFO_BUILD_TESTS=ON
+
+    - name: Configure (Windows Clang)
+      if: matrix.cc == 'clang'
+      run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_BUILD_TYPE=Release -DTYPEINFO_BUILD_TESTS=ON
 
     - name: Build
       run: cmake --build build --config Release
 
-    - name: Run tests (Unix only - ctest.h has issues on Windows)
+    - name: Run tests (Unix)
       if: runner.os != 'Windows'
       run: make -C build test
+
+    - name: Run tests (Windows Clang)
+      if: matrix.cc == 'clang'
+      run: cmake --build build --target test
 
     - name: Run print_types (Unix)
       if: runner.os != 'Windows'
       run: ./build/examples/print_types
 
-    - name: Run print_types (Windows)
-      if: runner.os == 'Windows'
+    - name: Run print_types (Windows MSVC)
+      if: runner.os == 'Windows' && matrix.cc != 'clang'
       run: build/examples/Release/print_types.exe
+
+    - name: Run print_types (Windows Clang)
+      if: matrix.cc == 'clang'
+      run: build/examples/print_types.exe
