@@ -106,9 +106,6 @@ static const char* builtin_symbol(enum CXTypeKind kind) {
     }
 }
 
-// Emits a qualifier flags expression (e.g., "TYPE_INFO_QUALIFIER_CONST |
-// TYPE_INFO_QUALIFIER_VOLATILE") to the output file. Emits "TYPE_INFO_QUALIFIER_NONE" when no
-// qualifiers are present.
 static void emit_qualifier_flags(FILE* out, CXType type) {
     int parts_count = 0;
     const char* parts[3];

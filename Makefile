@@ -12,7 +12,7 @@ examples/print_types_typeinfo.c: examples/print_types.h include/typeinfo.h typei
 	./typeinfo_metaprogram -Iinclude -I$(CLANG_INCLUDE) $< -o $(basename $@)
 
 test/test: test/test.c test/test_types_typeinfo.c
-	$(CC) $(CFLAGS) -Iinclude -Itest $^ -o $@
+	$(CC) $(CFLAGS) -Iinclude -Itest $^ -o $@ -Wno-attributes -Wno-pragmas -Wno-unused-function
 
 test/test_types_typeinfo.c: test/test_types.h include/typeinfo.h typeinfo_metaprogram
 	./typeinfo_metaprogram -Iinclude -I$(CLANG_INCLUDE) $< -o $(basename $@)
