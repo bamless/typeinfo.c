@@ -631,11 +631,7 @@ static void print_usage(const char* program_name, FILE* stream) {
     fprintf(stream, "  -o <out_name>       base name of generated file (REQUIRED)\n");
     fprintf(stream, "  -I<dir>             add include path (forwarded to clang)\n");
     fprintf(stream, "  -std=<std>          set language standard (forwarded to clang)\n");
-    fprintf(stream,
-            "  -no-builtin-types   do not emit builtin type info declarations/definitions\n");
-    fprintf(
-        stream,
-        "  -no-absolute-sizes  emit sizeof/offsetof/TYPEINFO_ALIGNOF instead of absolue values\n");
+    fprintf(stream, "  -no-builtin-types   do not emit builtin type info declarations/definitions\n");
     fprintf(stream, "  -R                  recursively walk directories\n");
     fprintf(stream, "  -h                  prints this help message and exit\n");
 }
@@ -718,18 +714,15 @@ static bool process_directory(const char* dir_path, CXIndex index, Type_Info_Con
 
     bool ok = true;
     array_foreach(char*, it, &paths) {
-        void* temp;
-        defer_loop(temp = temp_checkpoint(), temp_rewind(temp)) {
-            const char* entry = *it;
-            const char* full;
-            size_t len = strlen(dir_path);
-            if(len > 0 && dir_path[len - 1] == '/') {
-                full = temp_sprintf("%s%s", dir_path, entry);
-            } else {
-                full = temp_sprintf("%s/%s", dir_path, entry);
-            }
-            ok &= process_path(full, index, ctx);
+        const char* entry = *it;
+        const char* full;
+        size_t len = strlen(dir_path);
+        if(len > 0 && dir_path[len - 1] == '/') {
+            full = temp_sprintf("%s%s", dir_path, entry);
+        } else {
+            full = temp_sprintf("%s/%s", dir_path, entry);
         }
+        ok &= process_path(full, index, ctx);
     }
 
     free_paths(&paths);
@@ -821,8 +814,7 @@ int main(int argc, char** argv) {
     char* header_name = temp_sprintf("%s.h", opts.out);
     char* source_name = temp_sprintf("%s.c", opts.out);
 
-    StringSlice header_basename = SS(header_name);
-    header_basename = ss_rsplit_once(&header_basename, '/');
+    StringSlice header_basename = ss_basename(SS(header_name));
 
     FILE* header = fopen(header_name, "w");
     FILE* source = fopen(source_name, "w");
@@ -836,9 +828,7 @@ int main(int argc, char** argv) {
     StringBuffer include_guard = {.allocator = &temp_allocator.base};
     sb_append(&include_guard, header_basename.data, header_basename.size);
     sb_replace(&include_guard, 0, ". ", '_');
-    for(size_t i = 0; i < include_guard.size; i++) {
-        include_guard.items[i] = toupper(include_guard.items[i]);
-    }
+    sb_to_upper(&include_guard);
 
     // Builtin typeinfo declarations
     fprintf(header,
