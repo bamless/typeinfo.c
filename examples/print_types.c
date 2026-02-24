@@ -31,15 +31,18 @@ static bool is_valid_cstr_type(Type_Info* type) {
     return type_inner == &typeinfo_char.base;
 }
 
-void print_value(const void* value, Type_Info* ti, int indent) {
-    if(!ti) {
+void print_value(Type_Any any, int indent) {
+    if(!any.type) {
         printf("<null typeinfo>\n");
         return;
     }
-    if(!value) {
+    if(!any.value) {
         printf("<null value>\n");
         return;
     }
+
+    void* value = any.value;
+    Type_Info* ti = any.type;
 
     switch(ti->tag) {
     case TYPE_TAG_INTEGER: {
@@ -93,7 +96,7 @@ void print_value(const void* value, Type_Info* ti, int indent) {
         // If we have base typeinfo, recurse once
         if(ptinfo->pointer_to && ptinfo->pointer_to->tag != TYPE_TAG_POINTER) {
             printf(" -> ");
-            print_value(p, ptinfo->pointer_to, indent);
+            print_value((Type_Any){p, ptinfo->pointer_to}, indent);
         } else {
             printf("\n");
         }
@@ -107,7 +110,7 @@ void print_value(const void* value, Type_Info* ti, int indent) {
         for(size_t i = 0; i < ainfo->num_elements; ++i) {
             void* elem_ptr = (char*)value + i * elem_ti->size;
             print_indent(indent + 2);
-            print_value(elem_ptr, elem_ti, indent + 2);
+            print_value((Type_Any){elem_ptr, elem_ti}, indent + 2);
         }
 
         print_indent(indent);
@@ -145,7 +148,7 @@ void print_value(const void* value, Type_Info* ti, int indent) {
                     printf("\"%s\"\n", (char*)field_ptr);
                 }
             } else {
-                print_value(field_ptr, m->type, indent + 2);
+                print_value((Type_Any){field_ptr, m->type}, indent + 2);
             }
         }
         print_indent(indent);
@@ -166,7 +169,7 @@ void print_value(const void* value, Type_Info* ti, int indent) {
             if(strcmp(m->name, "") != 0) printf("%s = ", m->name);
 
             // All union members start at offset 0
-            print_value(value, m->type, indent + 2);
+            print_value((Type_Any){value, m->type}, indent + 2);
         }
         print_indent(indent);
         printf("}\n");
@@ -221,7 +224,7 @@ void print_value(const void* value, Type_Info* ti, int indent) {
     }
 }
 
-#define print(v, T) print_value(&v, (Type_Info*)&typeinfo_##T, 0)
+#define print(v, T) print_value(type_any(&v, T), 0)
 
 int main(void) {
     Foo foo = {

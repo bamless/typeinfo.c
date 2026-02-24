@@ -23,6 +23,8 @@
     #error "No alignof support detected for this compiler"
 #endif
 
+#define type_any(value, T) ((Type_Any){value, (Type_Info*)&typeinfo_##T})
+
 typedef enum {
     TYPE_TAG_VOID,
     TYPE_TAG_INTEGER,
@@ -111,5 +113,12 @@ typedef struct {
     Type_Info_Enum_Value* values;
     size_t values_count;
 } Type_Info_Enum;
+
+// Struct describing any type.
+// It's composed by a typeinfo and a type-erased pointer to the value.
+typedef struct {
+    void* value;
+    Type_Info* type;
+} Type_Any;
 
 #endif  // TYPEINFO_H_
