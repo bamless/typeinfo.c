@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <clang-c/CXString.h>
 #include <clang-c/Index.h>
-#include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
