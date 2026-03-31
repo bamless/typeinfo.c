@@ -23,11 +23,7 @@ typedef struct {
     bool no_builtin_types;
     char** files;
     int count;
-    struct {
-        char** items;
-        size_t size, capacity;
-        void* allocator;
-    } forwarded;
+    Array(char*) forwarded;
 } Opts;
 
 typedef struct {
@@ -296,8 +292,7 @@ static void enqueue_type_if_needed(Type_Info_Context* ctx, CXType type) {
         return;
     }
 
-    Visited_Type_Entry* visited;
-    hmap_get_cstr(ctx->visited_types, (char*)name, &visited);
+    Visited_Type_Entry* visited = hmap_get_cstr(ctx->visited_types, (char*)name);
     if(visited) {
         clang_disposeString(spelling);
         return;
@@ -494,8 +489,7 @@ static void process_queued_type(Type_Info_Context* ctx, CXType type) {
     CXString spelling = clang_getCursorSpelling(c);
     const char* name = clang_getCString(spelling);
 
-    Visited_Type_Entry* visited;
-    hmap_get_cstr(ctx->visited_types, (char*)name, &visited);
+    Visited_Type_Entry* visited = hmap_get_cstr(ctx->visited_types, (char*)name);
     if(visited) {
         clang_disposeString(spelling);
         return;
@@ -804,6 +798,7 @@ static void parse_arguments(int argc, char** argv) {
     opts.files = argv;
     opts.count = npos;
 }
+
 int main(int argc, char** argv) {
     parse_arguments(argc, argv);
     array_push(&opts.forwarded, RUNNING_METAPROGRAM);
