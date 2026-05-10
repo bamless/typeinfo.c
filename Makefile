@@ -2,6 +2,9 @@ CC=gcc
 CFLAGS=-Wall -Wextra -std=c99
 CLANG_INCLUDE=$(shell clang -print-resource-dir)/include
 
+.PHONY: all
+all: examples/print_types
+
 typeinfo_metaprogram: typeinfo_metaprogram.c extlib.h
 	$(CC) $(CFLAGS) $< -o $@ -lclang
 
