@@ -18,15 +18,6 @@
 #define ctx_indent(ctx)   defer_loop((ctx)->indent += INDENT, (ctx)->indent -= INDENT)
 
 typedef struct {
-    const char* out;
-    bool recursive;
-    bool no_builtin_types;
-    char** files;
-    int count;
-    Array(char*) forwarded;
-} Opts;
-
-typedef struct {
     char** items;
     size_t size, capacity;
     void* allocator;
@@ -58,7 +49,14 @@ typedef struct {
     Type_Queue* pending_types;
 } Type_Info_Context;
 
-static Opts opts;
+static struct {
+    const char* out;
+    bool recursive;
+    bool no_builtin_types;
+    char** files;
+    int count;
+    Array(char*) forwarded;
+} opts;
 
 static const char* builtin_symbol(enum CXTypeKind kind) {
     switch(kind) {

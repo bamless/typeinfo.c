@@ -11,7 +11,6 @@ add_custom_command(
     DEPENDS
         typeinfo_metaprogram
         ${CMAKE_CURRENT_SOURCE_DIR}/print_types.h
-        ${PROJECT_SOURCE_DIR}/include/typeinfo.h
     COMMENT "Generating typeinfo for print_types"
 )
 add_executable(print_types

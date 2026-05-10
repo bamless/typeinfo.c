@@ -4,3 +4,4 @@ typeinfo_metaprogram
 examples/print_types
 test/test_types_typeinfo.*
 test/test
+*.d
