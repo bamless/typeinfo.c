@@ -45,8 +45,8 @@ typedef struct {
     FILE* header;
     FILE* source;
     int indent;
-    Visited_Types* visited_types;
-    Type_Queue* pending_types;
+    Visited_Types visited_types;
+    Type_Queue pending_types;
 } Type_Info_Context;
 
 static struct {
@@ -290,13 +290,13 @@ static void enqueue_type_if_needed(Type_Info_Context* ctx, CXType type) {
         return;
     }
 
-    Visited_Type_Entry* visited = hmap_get_cstr(ctx->visited_types, (char*)name);
+    Visited_Type_Entry* visited = hmap_get_cstr(&ctx->visited_types, (char*)name);
     if(visited) {
         clang_disposeString(spelling);
         return;
     }
 
-    array_push(ctx->pending_types, type);  // Add to queue
+    array_push(&ctx->pending_types, type);  // Add to queue
     clang_disposeString(spelling);
 }
 
@@ -487,12 +487,12 @@ static void process_queued_type(Type_Info_Context* ctx, CXType type) {
     CXString spelling = clang_getCursorSpelling(c);
     const char* name = clang_getCString(spelling);
 
-    Visited_Type_Entry* visited = hmap_get_cstr(ctx->visited_types, (char*)name);
+    Visited_Type_Entry* visited = hmap_get_cstr(&ctx->visited_types, (char*)name);
     if(visited) {
         clang_disposeString(spelling);
         return;
     }
-    hmap_put_cstr(ctx->visited_types, temp_strdup(name), true);
+    hmap_put_cstr(&ctx->visited_types, temp_strdup(name), true);
 
     FILE* header = ctx->header;
     FILE* source = ctx->source;
@@ -611,7 +611,7 @@ static enum CXChildVisitResult queue_types(CXCursor c, CXCursor parent, CXClient
     }
 
     assert(clang_Type_getSizeOf(type) >= 0);
-    array_push(ctx->pending_types, type);
+    array_push(&ctx->pending_types, type);
 
     return CXChildVisit_Recurse;
 }
@@ -683,13 +683,13 @@ static bool process_file(const char* file_path, CXIndex index, Type_Info_Context
     clang_visitChildren(root, queue_types, ctx);
 
     size_t processed = 0;
-    while(processed < ctx->pending_types->size) {
-        CXType type = ctx->pending_types->items[processed];
+    while(processed < ctx->pending_types.size) {
+        CXType type = ctx->pending_types.items[processed];
         process_queued_type(ctx, type);
         processed++;
     }
 
-    ctx->pending_types->size = 0;
+    ctx->pending_types.size = 0;
     clang_disposeTranslationUnit(unit);
 
     return true;
@@ -836,14 +836,9 @@ int main(int argc, char** argv) {
     fprintf(source, "#include \"" SS_Fmt "\"\n\n", SS_Arg(header_basename));
     if(!opts.no_builtin_types) emit_builtin_defs(source);
 
-    Visited_Types visited = {0};
-    Type_Queue pending = {0};
     Type_Info_Context ctx = {
         .header = header,
         .source = source,
-        .indent = 0,
-        .visited_types = &visited,
-        .pending_types = &pending,
     };
 
     int result = 0;
@@ -861,10 +856,10 @@ int main(int argc, char** argv) {
     fclose(source);
 
     printf("Generated: %s and %s\n", header_name, source_name);
-    printf("Generated: %zu type infos\n", visited.size);
+    printf("Generated: %zu type infos\n", ctx.visited_types.size);
 
-    hmap_free(&visited);
-    array_free(&pending);
+    hmap_free(&ctx.visited_types);
+    array_free(&ctx.pending_types);
 
     return result;
 }
