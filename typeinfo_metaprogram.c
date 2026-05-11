@@ -24,29 +24,11 @@ typedef struct {
 } Annotations;
 
 typedef struct {
-    char* key;
-    bool value;
-} Visited_Type_Entry;
-
-typedef struct {
-    Visited_Type_Entry* entries;
-    size_t* hashes;
-    size_t size, capacity;
-    Allocator* allocator;
-} Visited_Types;
-
-typedef struct {
-    CXType* items;
-    size_t size, capacity;
-    Allocator* allocator;
-} Type_Queue;
-
-typedef struct {
     FILE* header;
     FILE* source;
     int indent;
-    Visited_Types visited_types;
-    Type_Queue pending_types;
+    HashMap(char*, bool) visited;
+    Array(CXType) pending_types;
 } Type_Info_Context;
 
 static struct {
@@ -290,8 +272,7 @@ static void enqueue_type_if_needed(Type_Info_Context* ctx, CXType type) {
         return;
     }
 
-    Visited_Type_Entry* visited = hmap_get_cstr(&ctx->visited_types, (char*)name);
-    if(visited) {
+    if(hmap_get_cstr(&ctx->visited, (char*)name)) {
         clang_disposeString(spelling);
         return;
     }
@@ -487,12 +468,12 @@ static void process_queued_type(Type_Info_Context* ctx, CXType type) {
     CXString spelling = clang_getCursorSpelling(c);
     const char* name = clang_getCString(spelling);
 
-    Visited_Type_Entry* visited = hmap_get_cstr(&ctx->visited_types, (char*)name);
-    if(visited) {
+    if(hmap_get_cstr(&ctx->visited, (char*)name)) {
         clang_disposeString(spelling);
         return;
     }
-    hmap_put_cstr(&ctx->visited_types, temp_strdup(name), true);
+
+    hmap_put_cstr(&ctx->visited, temp_strdup(name), true);
 
     FILE* header = ctx->header;
     FILE* source = ctx->source;
@@ -856,9 +837,9 @@ int main(int argc, char** argv) {
     fclose(source);
 
     printf("Generated: %s and %s\n", header_name, source_name);
-    printf("Generated: %zu type infos\n", ctx.visited_types.size);
+    printf("Generated: %zu type infos\n", ctx.visited.size);
 
-    hmap_free(&ctx.visited_types);
+    hmap_free(&ctx.visited);
     array_free(&ctx.pending_types);
 
     return result;
