@@ -54,5 +54,6 @@ clean:
 		test/test test/test.d test/test_types_typeinfo.{c,h}                              \
 		typeinfo_metaprogram typeinfo_metaprogram.d
 
+-include typeinfo_metaprogram.d
 -include examples/print_types.d
 -include test/test.d
