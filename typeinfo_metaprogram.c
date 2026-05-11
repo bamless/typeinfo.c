@@ -20,7 +20,7 @@
 typedef struct {
     char** items;
     size_t size, capacity;
-    void* allocator;
+    Allocator* allocator;
 } Annotations;
 
 typedef struct {
@@ -32,13 +32,13 @@ typedef struct {
     Visited_Type_Entry* entries;
     size_t* hashes;
     size_t size, capacity;
-    void* allocator;
+    Allocator* allocator;
 } Visited_Types;
 
 typedef struct {
     CXType* items;
     size_t size, capacity;
-    void* allocator;
+    Allocator* allocator;
 } Type_Queue;
 
 typedef struct {
@@ -257,7 +257,7 @@ static enum CXChildVisitResult collect_annotations(CXCursor c, CXCursor parent,
 static void emit_annotations_for_cursor(CXCursor c, FILE* out) {
     void* temp;
     defer_loop(temp = temp_checkpoint(), temp_rewind(temp)) {
-        Annotations annotations = {.allocator = &temp_allocator};
+        Annotations annotations = {.allocator = &temp_allocator.base};
         clang_visitChildren(c, collect_annotations, &annotations);
         fprintf(out, "(char*[]){ ");
         array_foreach(char*, it, &annotations) {
@@ -622,7 +622,8 @@ static void print_usage(const char* program_name, FILE* stream) {
     fprintf(stream, "  -o <out_name>       base name of generated file (REQUIRED)\n");
     fprintf(stream, "  -I<dir>             add include path (forwarded to clang)\n");
     fprintf(stream, "  -std=<std>          set language standard (forwarded to clang)\n");
-    fprintf(stream, "  -no-builtin-types   do not emit builtin type info declarations/definitions\n");
+    fprintf(stream,
+            "  -no-builtin-types   do not emit builtin type info declarations/definitions\n");
     fprintf(stream, "  -R                  recursively walk directories\n");
     fprintf(stream, "  -h                  prints this help message and exit\n");
 }
