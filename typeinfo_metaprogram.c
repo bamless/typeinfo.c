@@ -640,8 +640,6 @@ static bool process_file(const char* file_path, CXIndex index, Type_Info_Context
             type_str = "fatal error";
             has_error = true;
             break;
-        default:
-            UNREACHABLE();
         }
 
         CXString diag_str = clang_formatDiagnostic(diag, clang_defaultDiagnosticDisplayOptions());
