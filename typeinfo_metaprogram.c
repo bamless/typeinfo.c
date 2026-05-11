@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <clang-c/CXDiagnostic.h>
 #include <clang-c/CXString.h>
 #include <clang-c/Index.h>
 #include <stdbool.h>
@@ -620,30 +621,11 @@ static bool process_file(const char* file_path, CXIndex index, Type_Info_Context
     for(unsigned i = 0; i < num_diags; ++i) {
         CXDiagnostic diag = clang_getDiagnostic(unit, i);
         enum CXDiagnosticSeverity severity = clang_getDiagnosticSeverity(diag);
-
-        const char* type_str;
-        switch(severity) {
-        case CXDiagnostic_Ignored:
-            type_str = "ignored";
-            break;
-        case CXDiagnostic_Note:
-            type_str = "note";
-            break;
-        case CXDiagnostic_Warning:
-            type_str = "warning";
-            break;
-        case CXDiagnostic_Error:
-            type_str = "error";
+        if(severity == CXDiagnostic_Error || severity == CXDiagnostic_Fatal) {
             has_error = true;
-            break;
-        case CXDiagnostic_Fatal:
-            type_str = "fatal error";
-            has_error = true;
-            break;
         }
-
         CXString diag_str = clang_formatDiagnostic(diag, clang_defaultDiagnosticDisplayOptions());
-        fprintf(stderr, "%s: %s\n", type_str, clang_getCString(diag_str));
+        fprintf(stderr, "%s\n", clang_getCString(diag_str));
         clang_disposeString(diag_str);
         clang_disposeDiagnostic(diag);
     }
