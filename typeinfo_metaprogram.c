@@ -703,16 +703,21 @@ static bool process_path(const char* path, CXIndex index, Type_Info_Context* ctx
     UNREACHABLE();
 }
 
-static void parse_arguments(int argc, char** argv) {
-    char* program_name = shift(argc, argv);
+static void parse_opts(int argc, char** argv) {
+#define get_opt_arg(opt_name)                                                    \
+    (i + 1 < argc ? argv[++i]                                                    \
+                  : (fprintf(stderr, "no argument for option `" opt_name "`\n"), \
+                     print_usage(program_name, stderr), exit(1), NULL))
 
     int npos = 0;
+    char* program_name = shift(argc, argv);
     for(int i = 0; i < argc; i++) {
-        if(strcmp("--", argv[i]) == 0) {  // All arguments after `--` are positional
-            for(i++; i < argc; i++) argv[npos++] = argv[i];
+        // All arguments after `--` are positional
+        if(strcmp("--", argv[i]) == 0) {
+            for(int j = i + 1; j < argc; j++) argv[npos++] = argv[j];
             break;
         }
-
+        // This is a non-opt
         if(strlen(argv[i]) <= 1 || argv[i][0] != '-') {
             argv[npos++] = argv[i];
             continue;
@@ -726,23 +731,13 @@ static void parse_arguments(int argc, char** argv) {
         } else if(strcmp("-no-builtin-types", argv[i]) == 0) {
             opts.no_builtin_types = true;
         } else if(strcmp("-o", argv[i]) == 0) {
-            if(i + 1 >= argc) {
-                fprintf(stderr, "no argument for option `-o`\n");
-                print_usage(program_name, stderr);
-                exit(1);
-            }
-            opts.out = argv[++i];
+            opts.out = get_opt_arg("-o");
         } else if(ss_starts_with(SS(argv[i]), SS("-I"))) {
             if(argv[i][2] != '\0') {
                 array_push(&opts.forwarded, argv[i]);
             } else {
-                if(i + 1 >= argc) {
-                    fprintf(stderr, "no argument for option `-I`\n");
-                    print_usage(program_name, stderr);
-                    exit(1);
-                }
                 array_push(&opts.forwarded, "-I");
-                array_push(&opts.forwarded, argv[++i]);
+                array_push(&opts.forwarded, get_opt_arg("-I"));
             }
         } else if(ss_starts_with(SS(argv[i]), SS("-std="))) {
             array_push(&opts.forwarded, argv[i]);
@@ -755,12 +750,15 @@ static void parse_arguments(int argc, char** argv) {
         exit(1);
     }
 
+    // non-opts sit at argv start after parsing
     opts.files = argv;
     opts.count = npos;
+
+#undef get_opt_arg
 }
 
 int main(int argc, char** argv) {
-    parse_arguments(argc, argv);
+    parse_opts(argc, argv);
     array_push(&opts.forwarded, RUNNING_METAPROGRAM);
     array_push(&opts.forwarded, "-x");
     array_push(&opts.forwarded, "c");
