@@ -36,12 +36,13 @@ typedef enum {
     TYPE_TAG_ENUM,
 } Type_Info_Tag;
 
-typedef enum {
+typedef uint8_t Type_Info_Qualifier;
+enum {
     TYPE_INFO_QUALIFIER_NONE = 0,
     TYPE_INFO_QUALIFIER_CONST = 1 << 0,
     TYPE_INFO_QUALIFIER_VOLATILE = 1 << 1,
     TYPE_INFO_QUALIFIER_RESTRICT = 1 << 2,
-} Type_Info_Qualifier;
+};
 
 typedef struct {
     Type_Info_Tag tag;
@@ -64,9 +65,9 @@ typedef struct {
 
 typedef struct {
     Type_Info base;
-    Type_Info* pointer_to;     // Inner type this pointer points-to
-    uint32_t qualifier_flags;  // Qualifiers applied to the pointer_to type; Bitmask of
-                               // `Type_Info_Qualifier`
+    Type_Info* pointer_to;           // Inner type this pointer points-to
+    Type_Info_Qualifier qualifiers;  // Qualifiers applied to the pointer_to type; Bitmask of
+                                     // `Type_Info_Qualifier`
 } Type_Info_Pointer;
 
 typedef struct {
@@ -80,8 +81,8 @@ typedef struct {
     const char* name;
     size_t offset;
     Type_Info* type;
-    uint32_t qualifier_flags;  // Qualifiers applied to this struct or union member; Bitmask of
-                               // `Type_Info_Qualifier`
+    Type_Info_Qualifier qualifiers;  // Qualifiers applied to this struct or union member; Bitmask
+                                     // of `Type_Info_Qualifier`
 } Type_Info_Member;
 
 typedef struct {

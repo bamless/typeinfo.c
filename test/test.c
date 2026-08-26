@@ -147,7 +147,7 @@ CTEST(pointer_types, test_const_pointer) {
     ASSERT_NOT_NULL(member);
     ASSERT_EQUAL(TYPE_TAG_POINTER, member->type->tag);
     Type_Info_Pointer* ptr_type = (Type_Info_Pointer*)member->type;
-    ASSERT_TRUE(ptr_type->qualifier_flags & TYPE_INFO_QUALIFIER_CONST);
+    ASSERT_TRUE(ptr_type->qualifiers & TYPE_INFO_QUALIFIER_CONST);
 }
 
 CTEST(pointer_types, test_volatile_pointer) {
@@ -155,7 +155,7 @@ CTEST(pointer_types, test_volatile_pointer) {
     ASSERT_NOT_NULL(member);
     ASSERT_EQUAL(TYPE_TAG_POINTER, member->type->tag);
     Type_Info_Pointer* ptr_type = (Type_Info_Pointer*)member->type;
-    ASSERT_TRUE(ptr_type->qualifier_flags & TYPE_INFO_QUALIFIER_VOLATILE);
+    ASSERT_TRUE(ptr_type->qualifiers & TYPE_INFO_QUALIFIER_VOLATILE);
 }
 
 CTEST(pointer_types, test_const_volatile_pointer) {
@@ -163,8 +163,8 @@ CTEST(pointer_types, test_const_volatile_pointer) {
     ASSERT_NOT_NULL(member);
     ASSERT_EQUAL(TYPE_TAG_POINTER, member->type->tag);
     Type_Info_Pointer* ptr_type = (Type_Info_Pointer*)member->type;
-    ASSERT_TRUE(ptr_type->qualifier_flags & TYPE_INFO_QUALIFIER_CONST);
-    ASSERT_TRUE(ptr_type->qualifier_flags & TYPE_INFO_QUALIFIER_VOLATILE);
+    ASSERT_TRUE(ptr_type->qualifiers & TYPE_INFO_QUALIFIER_CONST);
+    ASSERT_TRUE(ptr_type->qualifiers & TYPE_INFO_QUALIFIER_VOLATILE);
 }
 
 // ==============================================================================
@@ -373,20 +373,20 @@ CTEST(nested_types, test_nested_anonymous_struct) {
 CTEST(qualifiers, test_const_member) {
     Type_Info_Member* member = find_member(&typeinfo_TestMemberQualifiers, "const_member");
     ASSERT_NOT_NULL(member);
-    ASSERT_TRUE(member->qualifier_flags & TYPE_INFO_QUALIFIER_CONST);
+    ASSERT_TRUE(member->qualifiers & TYPE_INFO_QUALIFIER_CONST);
 }
 
 CTEST(qualifiers, test_volatile_member) {
     Type_Info_Member* member = find_member(&typeinfo_TestMemberQualifiers, "volatile_member");
     ASSERT_NOT_NULL(member);
-    ASSERT_TRUE(member->qualifier_flags & TYPE_INFO_QUALIFIER_VOLATILE);
+    ASSERT_TRUE(member->qualifiers & TYPE_INFO_QUALIFIER_VOLATILE);
 }
 
 CTEST(qualifiers, test_const_volatile_member) {
     Type_Info_Member* member = find_member(&typeinfo_TestMemberQualifiers, "const_volatile_member");
     ASSERT_NOT_NULL(member);
-    ASSERT_TRUE(member->qualifier_flags & TYPE_INFO_QUALIFIER_CONST);
-    ASSERT_TRUE(member->qualifier_flags & TYPE_INFO_QUALIFIER_VOLATILE);
+    ASSERT_TRUE(member->qualifiers & TYPE_INFO_QUALIFIER_CONST);
+    ASSERT_TRUE(member->qualifiers & TYPE_INFO_QUALIFIER_VOLATILE);
 }
 
 // ==============================================================================

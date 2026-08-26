@@ -125,9 +125,9 @@ void print_value(Type_Any any, int indent) {
 
             print_indent(indent + 2);
 
-            if(m->qualifier_flags & TYPE_INFO_QUALIFIER_CONST) printf("const ");
-            if(m->qualifier_flags & TYPE_INFO_QUALIFIER_VOLATILE) printf("volatile ");
-            if(m->qualifier_flags & TYPE_INFO_QUALIFIER_RESTRICT) printf("restrict ");
+            if(m->qualifiers & TYPE_INFO_QUALIFIER_CONST) printf("const ");
+            if(m->qualifiers & TYPE_INFO_QUALIFIER_VOLATILE) printf("volatile ");
+            if(m->qualifiers & TYPE_INFO_QUALIFIER_RESTRICT) printf("restrict ");
             if(strcmp(m->name, "") != 0) printf("%s = ", m->name);
 
             bool as_cstr = false;
@@ -163,9 +163,9 @@ void print_value(Type_Any any, int indent) {
 
             print_indent(indent + 2);
 
-            if(m->qualifier_flags & TYPE_INFO_QUALIFIER_CONST) printf("const ");
-            if(m->qualifier_flags & TYPE_INFO_QUALIFIER_VOLATILE) printf("volatile ");
-            if(m->qualifier_flags & TYPE_INFO_QUALIFIER_RESTRICT) printf("restrict ");
+            if(m->qualifiers & TYPE_INFO_QUALIFIER_CONST) printf("const ");
+            if(m->qualifiers & TYPE_INFO_QUALIFIER_VOLATILE) printf("volatile ");
+            if(m->qualifiers & TYPE_INFO_QUALIFIER_RESTRICT) printf("restrict ");
             if(strcmp(m->name, "") != 0) printf("%s = ", m->name);
 
             // All union members start at offset 0
