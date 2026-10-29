@@ -1,5 +1,5 @@
 /**
- * extlib v2.2.0 - c extended library
+ * extlib v2.3.1 - c extended library
  *
  * Single-header-file library that provides functionality that extends the standard c library.
  * Features:
@@ -50,6 +50,23 @@
  *      SECTION: IO
  *
  *  Changelog:
+ *
+ *  v2.3.0:
+ *      - Added `get_file_size` and `get_file_size_fp` to query the size of a file by path or by
+ *        open `FILE *`. They use `stat`/`fstat` on posix and `GetFileAttributesEx`/`GetFileSizeEx`
+ *        on windows, instead of the `fseek`/`ftell` dance, which is unspecified for binary streams
+ *        and limited to `long` on the platforms where it does work. On failure they log the reason
+ *        and leave it in `errno`.
+ *      - `read_file` now sizes the buffer with `get_file_size_fp` and fills it in a single pass,
+ *        falling back to reading until EOF for the files that report no size (pipes, most of
+ *        `/proc`, ...), which it used to fail on.
+ *      - Fixed `read_file` overwriting the size of the string buffer instead of appending to it,
+ *        leaving a non-empty buffer with a size that didn't match its contents.
+ *      - `read_line` now reserves relative to what the buffer already holds, instead of a flat 256
+ *        bytes of capacity.
+ *
+ *  v2.2.1:
+ *      - Move some `#define`s in header portion of library (before `EXTLIB_IMPL` block).
  *
  *  v2.2.0:
  *      - Tweaked arena to use an explicit free list for page reuse.
@@ -886,7 +903,21 @@ EXT_API char *ext_temp_vsprintf(const char *fmt, va_list ap);
 // SECTION: Arena allocator
 //
 
-// An allocated chunk in the arena
+#ifndef EXT_ARENA_PAGE_SZ
+#define EXT_ARENA_PAGE_SZ EXT_KiB(8)
+#endif  // EXT_ARENA_PAGE_SZ
+
+#ifndef EXT_DEFAULT_ALIGNMENT
+#define EXT_DEFAULT_ALIGNMENT 16
+#endif  // EXT_DEFAULT_ALIGNMENT
+EXT_STATIC_ASSERT(((EXT_DEFAULT_ALIGNMENT) & ((EXT_DEFAULT_ALIGNMENT)-1)) == 0,
+                  "default alignment must be a power of 2");
+
+EXT_API void *ext__arena_alloc_wrap_(Ext_Allocator *a, size_t size);
+EXT_API void *ext__arena_realloc_wrap_(Ext_Allocator *a, void *ptr, size_t old_size,
+                                       size_t new_size);
+EXT_API void ext__arena_free_wrap_(Ext_Allocator *a, void *ptr, size_t size);
+
 typedef struct Ext_ArenaPage {
     struct Ext_ArenaPage *prev;
     size_t size;
@@ -897,8 +928,7 @@ typedef struct Ext_ArenaPage {
 
 // Saved Arena state at a point in time
 typedef struct {
-    Ext_ArenaPage *page;
-    size_t pos;
+    size_t offset;
 } Ext_ArenaCheckpoint;
 
 typedef enum {
@@ -1026,7 +1056,7 @@ EXT_API char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 
 // -----------------------------------------------------------------------------
 // SECTION: Dynamic array
-//
+
 // A growable, type-safe, dynamic array implemented as macros.
 // The dynamic array integrates with the `Allocator` interface and the context to support custom
 // allocators for its backing array.
@@ -1510,13 +1540,24 @@ typedef struct {
 } Ext_Paths;
 EXT_API void ext_free_paths(Ext_Paths *paths);
 
-// Reads an entire file into the provided string buffer. Retuns true on succes, false on failure.
+// Returns the size in bytes of the file at `path`, or -1 on failure, in which case the reason is
+// logged and left in `errno`. Asking for the size of a directory is an error. Keep in mind that the
+// size of files that are not regular (pipes, character devices, most files under `/proc`, ...) is
+// reported as 0 by the operating system, even though reading them may yield data.
+EXT_API int64_t ext_get_file_size(const char *path);
+// Like `get_file_size`, but takes an already open file. Prefer this one when you have a `FILE *` at
+// hand, as it queries the file the handle refers to, instead of resolving `path` a second time.
+EXT_API int64_t ext_get_file_size_fp(FILE *f);
+// Reads an entire file, appending its contents to the provided string buffer. Retuns true on
+// succes, false on failure.
 EXT_API bool ext_read_file(const char *path, Ext_StringBuffer *sb);
 // Writes `data` into the file at `path`. The file is overwritten if it exists. Returns true on
 // success, false on failure
 EXT_API bool ext_write_file(const char *path, const void *data, size_t size);
-// Reads a line from a file into the provided string buffer. Returns 1 if there are more lines to be
-// read, 0 if there aren't or -1 on error.
+// Reads a line from a file, appending it (terminator included, if the line has one) to the provided
+// string buffer. Returns 1 if there are more lines to be read, 0 if there aren't or -1 on error.
+// Keep in mind that a last line without a terminator is still appended to the buffer, but comes
+// back with a return value of 0, as the end of the file was reached while reading it.
 EXT_API int ext_read_line(FILE *f, Ext_StringBuffer *sb);
 // Reads a directory into the `paths` array. Returns true on success, false on failure
 EXT_API bool ext_read_dir(const char *path, Ext_Paths *paths);
@@ -1556,7 +1597,7 @@ EXT_API int ext_cmd_write(const char *cmd, const void *data, size_t size);
 
 // -----------------------------------------------------------------------------
 // SECTION: Hashmap
-//
+
 // Generic typesafe hashmap.
 // The hashmap is implemented using open-addressing and linear probing. Keys are stored at
 // indices 0 through capacity (inclusive); each slot may be empty, a tombstone, or a live entry.
@@ -2307,6 +2348,7 @@ static void ext_default_log(Ext_LogLevel lvl, void *data, const char *fmt, va_li
 // -----------------------------------------------------------------------------
 // SECTION: Context
 //
+
 EXT_TLS Ext_Context *ext_context = &(Ext_Context){
     .alloc = &ext_default_allocator.base,
     .log_level = EXT_INFO,
@@ -2337,12 +2379,6 @@ Ext_Context *ext_pop_context(void) {
 extern char __heap_base[];
 static void *ext_heap_start = (void *)__heap_base;
 #endif  // EXTLIB_WASM
-
-#ifndef EXT_DEFAULT_ALIGNMENT
-#define EXT_DEFAULT_ALIGNMENT 16
-#endif  // EXT_DEFAULT_ALIGNMENT
-EXT_STATIC_ASSERT(((EXT_DEFAULT_ALIGNMENT) & ((EXT_DEFAULT_ALIGNMENT)-1)) == 0,
-                  "default alignment must be a power of 2");
 
 #ifndef EXT_DEFAULT_TEMP_SIZE
 #define EXT_DEFAULT_TEMP_SIZE EXT_MiB(256)
@@ -2409,6 +2445,7 @@ Ext_DefaultAllocator ext_default_allocator = {
 // -----------------------------------------------------------------------------
 // SECTION: Temporary allocator
 //
+
 static void *ext_temp_alloc_wrap(Ext_Allocator *a, size_t size);
 static void *ext_temp_realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size);
 static void ext_temp_free_wrap(Ext_Allocator *a, void *ptr, size_t size);
@@ -2534,9 +2571,6 @@ char *ext_temp_vsprintf(const char *fmt, va_list ap) {
 // -----------------------------------------------------------------------------
 // SECTION: Arena allocator
 //
-#ifndef EXT_ARENA_PAGE_SZ
-#define EXT_ARENA_PAGE_SZ EXT_KiB(8)
-#endif  // EXT_ARENA_PAGE_SZ
 
 static void ext_arena_reset_page(const Ext_Arena *arena, Ext_ArenaPage *page) {
     page->base = 0;
@@ -2615,7 +2649,9 @@ void ext__arena_free_wrap_(Ext_Allocator *a, void *ptr, size_t size) {
     ext_arena_free((Ext_Arena *)a, ptr, size);
 }
 
-void *ext_arena_alloc(Ext_Arena *a, size_t size) {
+static void *ext__arena_alloc_raw_(Ext_Arena *a, size_t size) {
+    if(!a->alignment) a->alignment = EXT_DEFAULT_ALIGNMENT;
+    if(!a->page_size) a->page_size = EXT_ARENA_PAGE_SZ;
     size = EXT_ALIGN_UP(size, a->alignment);
 
     if(!a->current_page) {
@@ -2627,7 +2663,7 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
     }
 
     size_t available = a->current_page->size - a->current_page->pos;
-    while(available < size) {
+    if(available < size) {
         if(a->flags & EXT_ARENA_NO_CHAIN) {
 #ifndef EXTLIB_NO_STD
             ext_log(EXT_ERROR, "Not enough space in arena: available %zu, requested %zu", available,
@@ -2643,7 +2679,6 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         page->base = a->current_page->base + a->current_page->pos;
         ext_slist_push_ext(a->current_page, page, prev);
         available = a->current_page->size - a->current_page->pos;
-        break;
     }
 
     EXT_ASSERT(available >= size, "Not enough space in arena");
@@ -2652,13 +2687,19 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
     EXT_ASSERT(EXT_ALIGN_PAD(result, a->alignment) == 0,
                "result not aligned to the arena's alignment");
     a->current_page->pos += size;
-    if(a->flags & EXT_ARENA_ZERO_ALLOC) memset(result, 0, size);
+    return result;
+}
 
+void *ext_arena_alloc(Ext_Arena *a, size_t size) {
+    void *result = ext__arena_alloc_raw_(a, size);
+    if(a->flags & EXT_ARENA_ZERO_ALLOC) memset(result, 0, size);
     return result;
 }
 
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size) {
     EXT_ASSERT(EXT_ALIGN_PAD(ptr, a->alignment) == 0, "ptr not aligned to the arena's alignment");
+
+    if(!ptr) return ext_arena_alloc(a, new_size);
 
     Ext_ArenaPage *page = a->current_page;
     EXT_ASSERT(page, "No pages in arena");
@@ -2667,10 +2708,13 @@ void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_siz
     if(page->data + page->pos - aligned_old == ptr) {
         // Reallocating last allocated memory, can grow/shrink page in-place
         page->pos -= aligned_old;
-        void *new_ptr = ext_arena_alloc(a, new_size);
+        void *new_ptr = ext__arena_alloc_raw_(a, new_size);
         // Can still get a different pointer in case the arena runs out of page space and needs to
         // allocate a brand new one. In this case we fallback on copying the data over.
-        if(new_ptr != ptr) memcpy(new_ptr, ptr, old_size);
+        if(new_ptr != ptr) memcpy(new_ptr, ptr, old_size < new_size ? old_size : new_size);
+        if((a->flags & EXT_ARENA_ZERO_ALLOC) && new_size > old_size) {
+            memset((char *)new_ptr + old_size, 0, new_size - old_size);
+        }
         return new_ptr;
     } else if(new_size > old_size) {
         void *new_ptr = ext_arena_alloc(a, new_size);
@@ -2678,6 +2722,15 @@ void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_siz
         return new_ptr;
     } else {
         return ptr;
+    }
+}
+
+static void ext__arena_pop_empty_pages_(Ext_Arena *a) {
+    while(a->current_page->prev &&
+          a->current_page->pos == EXT_ALIGN_PAD(a->current_page->data, a->alignment)) {
+        Ext_ArenaPage *page = a->current_page;
+        ext_slist_pop_ext(a->current_page, prev);
+        ext_slist_push_ext(a->free_pages, page, prev);
     }
 }
 
@@ -2694,46 +2747,35 @@ void ext_arena_free(Ext_Arena *a, void *ptr, size_t size) {
     if(page->data + page->pos - size == ptr) {
         // Deallocating last allocated memory, can shrink in-place
         page->pos -= size;
+        ext__arena_pop_empty_pages_(a);
     } else {
         // no-op
     }
 }
 
 Ext_ArenaCheckpoint ext_arena_checkpoint(const Ext_Arena *a) {
-    if(!a->current_page) {
-        return (Ext_ArenaCheckpoint){0};
-    } else {
-        return (Ext_ArenaCheckpoint){
-            a->current_page,
-            a->current_page->pos,
-        };
-    }
+    return (Ext_ArenaCheckpoint){ext_arena_get_allocated(a)};
 }
 
-void ext_arena_rewind(Ext_Arena *a, Ext_ArenaCheckpoint checkpoint) {
-    if(!checkpoint.page) {
-        ext_arena_reset(a);
-        return;
-    }
-
-    while(a->current_page != checkpoint.page) {
-        EXT_ASSERT(a->current_page, "checkpoint page not found in arena");
+void ext_arena_rewind(Ext_Arena *a, Ext_ArenaCheckpoint cp) {
+    while(a->current_page && a->current_page->base >= cp.offset) {
         Ext_ArenaPage *page = a->current_page;
         ext_slist_pop_ext(a->current_page, prev);
-        ext_arena_reset_page(a, page);
         ext_slist_push_ext(a->free_pages, page, prev);
     }
+    if(!a->current_page) return;
 
-    a->current_page = checkpoint.page;
-    a->current_page->pos = checkpoint.pos;
+    Ext_ArenaPage *page = a->current_page;
+    size_t start = EXT_ALIGN_PAD(page->data, a->alignment);
+    size_t pos = cp.offset - page->base;
+    if(pos < start) pos = start;
+    if(pos < page->pos) page->pos = pos;
 }
 
 void ext_arena_reset(Ext_Arena *a) {
-    if(!a->current_page) return;
     while(a->current_page) {
         Ext_ArenaPage *page = a->current_page;
         ext_slist_pop_ext(a->current_page, prev);
-        ext_arena_reset_page(a, page);
         ext_slist_push_ext(a->free_pages, page, prev);
     }
 }
@@ -2793,6 +2835,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 // -----------------------------------------------------------------------------
 // SECTION: String buffer
 //
+
 #ifndef EXTLIB_NO_STD
 #include <ctype.h>
 #else
@@ -2877,6 +2920,7 @@ int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap) {
 // -----------------------------------------------------------------------------
 // SECTION: String slice
 //
+
 Ext_StringSlice ext_ss_from(const void *mem, size_t size) {
     return (Ext_StringSlice){size, mem};
 }
@@ -3178,7 +3222,7 @@ char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a) {
     return res;
 }
 
-static bool ext__is_path_sep(char c) {
+static bool ext__is_path_sep_(char c) {
 #ifdef EXT_WINDOWS
     return c == '/' || c == '\\';
 #else
@@ -3187,26 +3231,26 @@ static bool ext__is_path_sep(char c) {
 }
 
 #ifdef EXT_WINDOWS
-static bool ext__is_drive_letter(Ext_StringSlice path) {
+static bool ext__is_drive_letter_(Ext_StringSlice path) {
     if(path.size < 2) return false;
     char c = path.data[0];
     return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) && path.data[1] == ':';
 }
 
-static bool ext__is_unc_path(Ext_StringSlice path) {
-    return path.size >= 2 && ext__is_path_sep(path.data[0]) && ext__is_path_sep(path.data[1]);
+static bool ext__is_unc_path_(Ext_StringSlice path) {
+    return path.size >= 2 && ext__is_path_sep_(path.data[0]) && ext__is_path_sep_(path.data[1]);
 }
 
 // Find the UNC root (e.g., server and share from path)
 // Returns the length of the root, or 0 if not a valid UNC path
-static size_t ext__unc_root_length(Ext_StringSlice path) {
-    if(!ext__is_unc_path(path)) return 0;
+static size_t ext__unc_root_length_(Ext_StringSlice path) {
+    if(!ext__is_unc_path_(path)) return 0;
     size_t pos = 2;  // Skip initial separators
 
     // Special cases: extended-length and device paths
     if(pos < path.size && path.data[pos] == '?') {
         pos++;  // Skip '?'
-        if(pos < path.size && ext__is_path_sep(path.data[pos])) {
+        if(pos < path.size && ext__is_path_sep_(path.data[pos])) {
             pos++;  // Skip separator
             // Check for drive letter format
             if(pos + 1 < path.size && path.data[pos + 1] == ':') {
@@ -3216,17 +3260,17 @@ static size_t ext__unc_root_length(Ext_StringSlice path) {
             if(pos + 3 < path.size && (path.data[pos] == 'U' || path.data[pos] == 'u') &&
                (path.data[pos + 1] == 'N' || path.data[pos + 1] == 'n') &&
                (path.data[pos + 2] == 'C' || path.data[pos + 2] == 'c') &&
-               ext__is_path_sep(path.data[pos + 3])) {
+               ext__is_path_sep_(path.data[pos + 3])) {
                 pos += 4;  // Skip "UNC" and separator
                 // Fall through to find server and share
             }
         }
     } else if(pos < path.size && path.data[pos] == '.') {
         pos++;  // Skip '.'
-        if(pos < path.size && ext__is_path_sep(path.data[pos])) {
+        if(pos < path.size && ext__is_path_sep_(path.data[pos])) {
             pos++;  // Skip separator
             // Device format - find next separator or end
-            while(pos < path.size && !ext__is_path_sep(path.data[pos])) {
+            while(pos < path.size && !ext__is_path_sep_(path.data[pos])) {
                 pos++;
             }
             return pos;
@@ -3234,7 +3278,7 @@ static size_t ext__unc_root_length(Ext_StringSlice path) {
     }
 
     // Standard UNC: find server name (up to next separator)
-    while(pos < path.size && !ext__is_path_sep(path.data[pos])) {
+    while(pos < path.size && !ext__is_path_sep_(path.data[pos])) {
         pos++;
     }
     if(pos >= path.size) return 0;  // Invalid: no share name
@@ -3242,7 +3286,7 @@ static size_t ext__unc_root_length(Ext_StringSlice path) {
     pos++;  // Skip separator after server
 
     // Find share name (up to next separator or end)
-    while(pos < path.size && !ext__is_path_sep(path.data[pos])) {
+    while(pos < path.size && !ext__is_path_sep_(path.data[pos])) {
         pos++;
     }
 
@@ -3252,11 +3296,11 @@ static size_t ext__unc_root_length(Ext_StringSlice path) {
 
 Ext_StringSlice ext_ss_basename(Ext_StringSlice path) {
     // Strip trailing separators
-    while(path.size > 0 && ext__is_path_sep(path.data[path.size - 1])) {
+    while(path.size > 0 && ext__is_path_sep_(path.data[path.size - 1])) {
         path.size--;
     }
     for(size_t i = path.size; i > 0; i--) {
-        if(ext__is_path_sep(path.data[i - 1])) {
+        if(ext__is_path_sep_(path.data[i - 1])) {
             return ext_ss_cut(path, i);
         }
     }
@@ -3265,17 +3309,17 @@ Ext_StringSlice ext_ss_basename(Ext_StringSlice path) {
 
 Ext_StringSlice ext_ss_dirname(Ext_StringSlice path) {
 #ifdef EXT_WINDOWS
-    size_t unc_root = ext__unc_root_length(path);
+    size_t unc_root = ext__unc_root_length_(path);
     if(unc_root > 0) {
         // Strip trailing separators after UNC root
         size_t end = path.size;
-        while(end > unc_root && ext__is_path_sep(path.data[end - 1])) {
+        while(end > unc_root && ext__is_path_sep_(path.data[end - 1])) {
             end--;
         }
         for(size_t i = end; i > unc_root; i--) {
-            if(ext__is_path_sep(path.data[i - 1])) {
+            if(ext__is_path_sep_(path.data[i - 1])) {
                 size_t dir_end = i - 1;
-                while(dir_end > unc_root && ext__is_path_sep(path.data[dir_end - 1])) {
+                while(dir_end > unc_root && ext__is_path_sep_(path.data[dir_end - 1])) {
                     dir_end--;
                 }
                 return ext_ss_trunc(path, dir_end);
@@ -3289,15 +3333,15 @@ Ext_StringSlice ext_ss_dirname(Ext_StringSlice path) {
 
     // Strip trailing separators (but keep at least one char for root paths)
     size_t end = path.size;
-    while(end > 1 && ext__is_path_sep(path.data[end - 1])) {
+    while(end > 1 && ext__is_path_sep_(path.data[end - 1])) {
         end--;
     }
 
     // Find last separator
     for(size_t i = end; i > 0; i--) {
-        if(ext__is_path_sep(path.data[i - 1])) {
+        if(ext__is_path_sep_(path.data[i - 1])) {
             size_t dir_end = i - 1;
-            while(dir_end > 0 && ext__is_path_sep(path.data[dir_end - 1])) {
+            while(dir_end > 0 && ext__is_path_sep_(path.data[dir_end - 1])) {
                 dir_end--;
             }
 
@@ -3317,7 +3361,7 @@ Ext_StringSlice ext_ss_dirname(Ext_StringSlice path) {
 
 #ifdef EXT_WINDOWS
     // If path is just a drive letter (e.g., "C:"), return it as-is
-    if(ext__is_drive_letter(path)) {
+    if(ext__is_drive_letter_(path)) {
         return ext_ss_trunc(path, 2);
     }
 #endif
@@ -3339,7 +3383,7 @@ Ext_StringSlice ext_ss_extension(Ext_StringSlice path) {
 }
 
 void ext_sb_append_path(Ext_StringBuffer *sb, Ext_StringSlice component) {
-    if(sb->size > 0 && !ext__is_path_sep(sb->items[sb->size - 1])) {
+    if(sb->size > 0 && !ext__is_path_sep_(sb->items[sb->size - 1])) {
 #ifdef EXT_WINDOWS
         // Use the same separator style as the existing path
         char sep = '/';
@@ -3364,6 +3408,7 @@ void ext_sb_append_path_cstr(Ext_StringBuffer *sb, const char *component) {
 // -----------------------------------------------------------------------------
 // SECTION: IO
 //
+
 #ifndef EXTLIB_NO_STD
 
 #if defined(EXT_POSIX) && !(defined(_POSIX_C_SOURCE) && defined(__USE_POSIX2))
@@ -3381,6 +3426,7 @@ int pclose(FILE *stream);
 #define _WINCON_
 #define WIN32_LEAN_AND_MEAN
 #include <direct.h>
+#include <io.h>
 #include <windows.h>
 
 #define getcwd _getcwd
@@ -3407,6 +3453,7 @@ static char *win32_strerror(DWORD error) {
 #include <sys/stat.h>
 #include <unistd.h>
 char *realpath(const char *restrict path, char *restrict resolved_path);
+int fileno(FILE *stream);
 #endif  // EXT_WINDOWS
 
 void ext_free_paths(Ext_Paths *paths) {
@@ -3417,26 +3464,95 @@ void ext_free_paths(Ext_Paths *paths) {
     ext_array_free(paths);
 }
 
+int64_t ext_get_file_size(const char *path) {
+#ifdef EXT_WINDOWS
+    WIN32_FILE_ATTRIBUTE_DATA attrs;
+    if(!GetFileAttributesExA(path, GetFileExInfoStandard, &attrs)) {
+        ext_log(EXT_ERROR, "couldn't get size of '%s': %s", path, win32_strerror(GetLastError()));
+        errno = EIO;
+        return -1;
+    }
+    if(attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        ext_log(EXT_ERROR, "couldn't get size of '%s': %s", path, strerror(EISDIR));
+        errno = EISDIR;
+        return -1;
+    }
+    return (int64_t)(((uint64_t)attrs.nFileSizeHigh << 32) | attrs.nFileSizeLow);
+#else
+    struct stat statbuf;
+    if(stat(path, &statbuf) < 0) {
+        int saved_errno = errno;
+        ext_log(EXT_ERROR, "couldn't get size of '%s': %s", path, strerror(errno));
+        errno = saved_errno;
+        return -1;
+    }
+    if(S_ISDIR(statbuf.st_mode)) {
+        ext_log(EXT_ERROR, "couldn't get size of '%s': %s", path, strerror(EISDIR));
+        errno = EISDIR;
+        return -1;
+    }
+    return (int64_t)statbuf.st_size;
+#endif  // EXT_WINDOWS
+}
+
+int64_t ext_get_file_size_fp(FILE *f) {
+#ifdef EXT_WINDOWS
+    HANDLE handle = (HANDLE)_get_osfhandle(_fileno(f));
+    if(handle == INVALID_HANDLE_VALUE) {
+        int saved_errno = errno;
+        ext_log(EXT_ERROR, "couldn't get file size: %s", strerror(errno));
+        errno = saved_errno;
+        return -1;
+    }
+
+    LARGE_INTEGER size;
+    if(!GetFileSizeEx(handle, &size)) {
+        ext_log(EXT_ERROR, "couldn't get file size: %s", win32_strerror(GetLastError()));
+        errno = EIO;
+        return -1;
+    }
+    return (int64_t)size.QuadPart;
+#else
+    struct stat statbuf;
+    if(fstat(fileno(f), &statbuf) < 0) {
+        int saved_errno = errno;
+        ext_log(EXT_ERROR, "couldn't get file size: %s", strerror(errno));
+        errno = saved_errno;
+        return -1;
+    }
+    if(S_ISDIR(statbuf.st_mode)) {
+        ext_log(EXT_ERROR, "couldn't get file size: %s", strerror(EISDIR));
+        errno = EISDIR;
+        return -1;
+    }
+    return (int64_t)statbuf.st_size;
+#endif  // EXT_WINDOWS
+}
+
 bool ext_read_file(const char *path, Ext_StringBuffer *sb) {
     bool res = true;
     FILE *f = fopen(path, "rb");
     if(!f) ext_return_exit(false);
-    if(fseek(f, 0, SEEK_END) < 0) ext_return_exit(false);
 
-    long long size;
-#ifdef EXT_WINDOWS
-    size = _ftelli64(f);
-#else
-    size = ftell(f);
-#endif  // EXT_WINDOWS
+    int64_t size = ext_get_file_size_fp(f);
     if(size < 0) ext_return_exit(false);
-    if(fseek(f, 0, SEEK_SET) < 0) ext_return_exit(false);
 
-    ext_sb_reserve_exact(sb, sb->size + size);
-    size_t nread = fread(sb->items + sb->size, 1, size, f);
-    if(nread < (size_t)size) ext_return_exit(false);
+    if(size > 0) {
+        ext_sb_reserve_exact(sb, sb->size + size);
+        sb->size += fread(sb->items + sb->size, 1, size, f);
+    } else {
+        // Files that aren't regular (pipes, most of `/proc`, ...) report no size at all, leaving
+        // us with no choice but to read until EOF
+        for(;;) {
+            ext_sb_reserve(sb, sb->size + 512);
+            size_t space = sb->capacity - sb->size;
+            size_t nread = fread(sb->items + sb->size, 1, space, f);
+            sb->size += nread;
+            if(nread < space) break;
+        }
+    }
+
     if(ferror(f)) ext_return_exit(false);
-    sb->size = size;
 
 exit:;
     int saved_errno = errno;
@@ -3468,19 +3584,24 @@ exit:;
 }
 
 int ext_read_line(FILE *f, Ext_StringBuffer *sb) {
-    ext_sb_reserve(sb, 256);
+    for(;;) {
+        ext_sb_reserve(sb, sb->size + 128);
 
-    char *res;
-    while((res = fgets(sb->items + sb->size, sb->capacity - sb->size, f)) != NULL) {
-        sb->size += strlen(sb->items + sb->size);
-        if(sb->items[sb->size - 1] == '\n') break;
-        ext_sb_reserve(sb, sb->size * 2);
+        // `fgets` sizes its buffer with an `int`, which a buffer grown past 2GB would overflow
+        size_t space = sb->capacity - sb->size;
+        if(space > INT_MAX) space = INT_MAX;
+
+        if(!fgets(sb->items + sb->size, (int)space, f)) break;
+
+        size_t len = strlen(sb->items + sb->size);
+        sb->size += len;
+        if(len && sb->items[sb->size - 1] == '\n') break;
     }
 
     if(ferror(f)) {
-        int saveErrno = errno;
+        int saved_errno = errno;
         ext_log(EXT_ERROR, "couldn't read line: %s", strerror(errno));
-        errno = saveErrno;
+        errno = saved_errno;
         return -1;
     }
 
@@ -3691,10 +3812,10 @@ char *ext_get_cwd_alloc(Ext_Allocator *a) {
 
     while(!getcwd(sb.items, sb.capacity)) {
         if(errno != ERANGE) {
-            int saveErrno = errno;
+            int saved_errno = errno;
             ext_log(EXT_ERROR, "couldn't get cwd: %s", strerror(errno));
             ext_sb_free(&sb);
-            errno = saveErrno;
+            errno = saved_errno;
             return NULL;
         }
         ext_sb_reserve(&sb, sb.capacity * 2);
@@ -3710,9 +3831,9 @@ char *ext_get_cwd_temp(void) {
 
 bool ext_set_cwd(const char *cwd) {
     if(chdir(cwd) < 0) {
-        int saveErrno = errno;
+        int saved_errno = errno;
         ext_log(EXT_ERROR, "couldn't change cwd to '%s': %s", cwd, strerror(errno));
-        errno = saveErrno;
+        errno = saved_errno;
         return false;
     }
     return true;
@@ -3741,10 +3862,10 @@ char *ext_get_abs_path_alloc(const char *path, Ext_Allocator *a) {
 #else
     char *abs = realpath(path, NULL);
     if(!abs) {
-        int saveErrno = errno;
+        int saved_errno = errno;
         ext_log(EXT_ERROR, "couldn't convert '%s' into an absolute path: %s", path,
                 strerror(errno));
-        errno = saveErrno;
+        errno = saved_errno;
         return NULL;
     }
     // This is stupid, but since we are not guaranteed to have PATH_MAX on all posix systems,
@@ -3788,14 +3909,15 @@ int ext_cmd_read(const char *cmd, Ext_StringBuffer *sb) {
     FILE *p = popen(cmd, mode);
     if(!p) ext_return_exit(-1);
 
-    const size_t chunk_size = 512;
     for(;;) {
-        ext_sb_reserve(sb, sb->size + chunk_size);
-        size_t read = fread(sb->items + sb->size, 1, sb->capacity - sb->size, p);
-        sb->size += read;
-        if(ferror(p)) ext_return_exit(-1);
-        if(feof(p)) break;
+        ext_sb_reserve(sb, sb->size + 512);
+        size_t space = sb->capacity - sb->size;
+        size_t nread = fread(sb->items + sb->size, 1, space, p);
+        sb->size += nread;
+        if(nread < space) break;
     }
+
+    if(ferror(p)) ext_return_exit(-1);
 
 exit:;
     int saved_errno = errno;
@@ -3839,11 +3961,6 @@ EXT__SUPPRESS_UNUSED_FUNC_END_
 #endif  // EXTLIB_IMPL
 
 EXT__SUPPRESS_UNUSED_FUNC_BEGIN_
-
-EXT_API void *ext__arena_alloc_wrap_(Ext_Allocator *a, size_t size);
-EXT_API void *ext__arena_realloc_wrap_(Ext_Allocator *a, void *ptr, size_t old_size,
-                                       size_t new_size);
-EXT_API void ext__arena_free_wrap_(Ext_Allocator *a, void *ptr, size_t size);
 
 #if ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) && \
     !defined(EXTLIB_NO_STD)
@@ -4191,6 +4308,8 @@ EXT__SUPPRESS_UNUSED_FUNC_END_
 #define FILE_SYMLINK           EXT_FILE_SYMLINK
 #define FILE_DIR               EXT_FILE_DIR
 #define FILE_OTHER             EXT_FILE_OTHER
+#define get_file_size          ext_get_file_size
+#define get_file_size_fp       ext_get_file_size_fp
 #define read_file              ext_read_file
 #define write_file             ext_write_file
 #define read_line              ext_read_line
