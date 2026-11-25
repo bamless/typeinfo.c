@@ -23,6 +23,7 @@
     #error "No alignof support detected for this compiler"
 #endif
 
+#define TI(T)              ((Type_Info*)&typeinfo_##T)
 #define type_any(value, T) ((Type_Any){value, (Type_Info*)&typeinfo_##T})
 
 typedef enum {
