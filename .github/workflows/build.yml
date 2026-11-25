@@ -26,7 +26,11 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update && sudo apt-get install -y libclang-dev
-        echo "CMAKE_PREFIX_PATH=$(llvm-config-18 --prefix)" >> $GITHUB_ENV
+        lib=$(find /usr/lib -maxdepth 3 -path '/usr/lib/llvm-*/lib/libclang.so' | sort -V | tail -n 1)
+        prefix=${lib%/lib/libclang.so}
+        test -n "$prefix" || { echo "No LLVM prefix found under /usr/lib" >&2; exit 1; }
+        echo "Using LLVM prefix: $prefix"
+        echo "CMAKE_PREFIX_PATH=$prefix" >> "$GITHUB_ENV"
 
     - name: Install LLVM (macOS)
       if: runner.os == 'macOS'
